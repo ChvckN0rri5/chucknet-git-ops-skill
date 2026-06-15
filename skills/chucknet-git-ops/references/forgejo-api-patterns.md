@@ -15,7 +15,7 @@ Forgejo instances have a few quirks that break naive GitHub-style commands. Thes
 The user is responsible for making `FORGE_HOST` and `FORGE_PAT` available to the agent. Typical options:
 
 - Exported in the shell before starting Hermes.
-- Stored in `~/.hermes/.env`.
+- Stored in Hermes's secret storage.
 - Injected by a secret manager of their choice.
 
 The examples below use `<secret-wrapper>` as a placeholder.

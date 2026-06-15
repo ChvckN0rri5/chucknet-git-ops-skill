@@ -24,16 +24,18 @@ required_environment_variables:
 
 Reusable git and forge-API workflow for a private source-control host. The recipes are written generically so they can be retargeted to a different owner, repo, host, or secret manager.
 
-## Environment Setup
+## Configuration
 
-This skill expects two environment variables. Set them in your shell, in `~/.hermes/.env`, or in whatever secret manager you use:
+This skill needs two values supplied by the user:
 
-- `FORGE_HOST` — the host where the repo lives, e.g. `forge.example.com` or `github.com`.
-- `FORGE_PAT` — a personal access token with push/pull access to the repo.
+- **Host** — the forge host, e.g. `forge.example.com` or `github.com`.
+- **Token** — a personal access token with push/pull access to the repo.
 
-If you prefer separate variables for GitHub, `GITHUB_HOST` and `GITHUB_TOKEN` work too; adjust the recipes accordingly. The examples below use `FORGE_HOST` and `FORGE_PAT`.
+When this skill loads, Hermes prompts for these via `FORGE_HOST` and `FORGE_PAT`. You can also set them ahead of time in your chosen secret store or shell session.
 
-In code examples, `<secret-wrapper>` means however you inject secrets into a command. That could be `infisical run --`, `op run --`, a simple `export FORGE_PAT=... &&`, or anything else. The skill itself does not depend on Infisical.
+If you prefer separate values for GitHub, use `GITHUB_HOST` and `GITHUB_TOKEN` and adjust the recipe placeholders accordingly. The examples below use `FORGE_HOST` and `FORGE_PAT`.
+
+In code examples, `<secret-wrapper>` means however you inject the token into a command. That could be a 1Password CLI run, an Infisical run, a manual `export`, or anything else. The skill itself does not depend on any specific secret manager.
 
 ## When to Use
 
@@ -50,14 +52,16 @@ Don't use this skill for public GitHub repos where plain `gh` and `git` already 
 
 | Item | Typical value / placeholder |
 |------|------------------------------|
-| Repo host | `${FORGE_HOST}` e.g. `forge.example.com` or `github.com` |
+| Repo host | `<HOST>` e.g. `forge.example.com` or `github.com` |
 | Repo path | `OWNER/REPO` (extract from remote URL) |
-| API base | `https://${FORGE_HOST}/api/v1/repos/OWNER/REPO` (Forgejo) or `https://api.${FORGE_HOST}/repos/OWNER/REPO` (GitHub) |
-| Auth header | Forgejo: `AuthorizationHeaderToken: ${FORGE_PAT}` (or `?access_token=${FORGE_PAT}` if the header is rejected). GitHub: `Authorization: token ${FORGE_PAT}` or `Authorization: Bearer ${FORGE_PAT}` |
-| Push URL | `https://${FORGE_PAT}@${FORGE_HOST}/OWNER/REPO.git` |
-| Secret wrapper | `<secret-wrapper> bash -c '... ${FORGE_PAT} ...'` |
+| API base | `https://<HOST>/api/v1/repos/OWNER/REPO` (Forgejo) or `https://api.<HOST>/repos/OWNER/REPO` (GitHub) |
+| Auth header | Forgejo: `AuthorizationHeaderToken: <TOKEN>` (or `?access_token=<TOKEN>` if the header is rejected). GitHub: `Authorization: token <TOKEN>` or `Authorization: Bearer <TOKEN>` |
+| Push URL | `https://<TOKEN>@<HOST>/OWNER/REPO.git` |
+| Secret wrapper | `<secret-wrapper> bash -c '... <TOKEN> ...'` |
 | Default branch | `main` |
 | Workflow | branch → commit → push → PR → CI → merge → cleanup |
+
+Substitute `<HOST>` and `<TOKEN>` with the user's configured `FORGE_HOST` and `FORGE_PAT` values (or `GITHUB_HOST` / `GITHUB_TOKEN`).
 
 ## Start of Session — Orient Before Acting
 
