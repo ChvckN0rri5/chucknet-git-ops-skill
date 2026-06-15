@@ -1,19 +1,39 @@
 ---
 name: chucknet-git-ops
-description: "Use when performing git operations on a private Forgejo or GitHub repo that uses PR-only workflow, PAT-based HTTPS auth, secret-wrapped API calls, and multi-assistant coordination."
+description: "Use when performing git operations on a private Forgejo or GitHub repo that uses PR-only workflow, PAT-based HTTPS auth, environment-wrapped API calls, and multi-assistant coordination."
 version: 1.0.0
 author: Hermes Agent
 license: MIT
 platforms: [linux]
 metadata:
   hermes:
-    tags: [git, forgejo, github, pr-workflow, pat, infisical, api, multi-agent]
+    tags: [git, forgejo, github, pr-workflow, pat, environment, api, multi-agent]
     related_skills: [github-pr-workflow]
+required_environment_variables:
+  - name: FORGE_HOST
+    prompt: "Forgejo or GitHub host (e.g. forge.example.com or github.com)"
+    help: "Set this to the host where the repo lives."
+    required_for: "API and git remote host"
+  - name: FORGE_PAT
+    prompt: "Personal access token"
+    help: "A PAT with repo push/pull access. For GitHub use GITHUB_TOKEN if preferred."
+    required_for: "HTTPS push and API auth"
 ---
 
 # ChuckNet Git Operations
 
-Reusable git and forge-API workflow for a private source-control host. The original context was a self-hosted Forgejo instance with SSH disabled, PAT-based HTTPS push, and Infisical-managed secrets. The recipes are written generically so they can be retargeted to a different owner, repo, host, or secret manager.
+Reusable git and forge-API workflow for a private source-control host. The recipes are written generically so they can be retargeted to a different owner, repo, host, or secret manager.
+
+## Environment Setup
+
+This skill expects two environment variables. Set them in your shell, in `~/.hermes/.env`, or in whatever secret manager you use:
+
+- `FORGE_HOST` — the host where the repo lives, e.g. `forge.example.com` or `github.com`.
+- `FORGE_PAT` — a personal access token with push/pull access to the repo.
+
+If you prefer separate variables for GitHub, `GITHUB_HOST` and `GITHUB_TOKEN` work too; adjust the recipes accordingly. The examples below use `FORGE_HOST` and `FORGE_PAT`.
+
+In code examples, `<secret-wrapper>` means however you inject secrets into a command. That could be `infisical run --`, `op run --`, a simple `export FORGE_PAT=... &&`, or anything else. The skill itself does not depend on Infisical.
 
 ## When to Use
 
@@ -30,12 +50,12 @@ Don't use this skill for public GitHub repos where plain `gh` and `git` already 
 
 | Item | Typical value / placeholder |
 |------|------------------------------|
-| Repo host | `forge.example.com` or `github.example.com` |
+| Repo host | `${FORGE_HOST}` e.g. `forge.example.com` or `github.com` |
 | Repo path | `OWNER/REPO` (extract from remote URL) |
-| API base | `https://<host>/api/v1/repos/OWNER/REPO` (Forgejo) or `https://api.github.com/repos/OWNER/REPO` (GitHub) |
-| Auth header | Forgejo: try `?access_token=<YOUR_PAT>` first; `AuthorizationHeaderToken: <YOUR_PAT>` may fail depending on Forgejo version/config. GitHub: `Authorization: token <YOUR_PAT>` or `Authorization: Bearer *** |
-| Push URL | `https://<YOUR_PAT>@<host>/OWNER/REPO.git` |
-| Secret wrapper | `infisical run --env=prod --silent -- bash -c '... <YOUR_PAT> ...'` (or your equivalent) |
+| API base | `https://${FORGE_HOST}/api/v1/repos/OWNER/REPO` (Forgejo) or `https://api.${FORGE_HOST}/repos/OWNER/REPO` (GitHub) |
+| Auth header | Forgejo: `AuthorizationHeaderToken: ${FORGE_PAT}` (or `?access_token=${FORGE_PAT}` if the header is rejected). GitHub: `Authorization: token ${FORGE_PAT}` or `Authorization: Bearer ${FORGE_PAT}` |
+| Push URL | `https://${FORGE_PAT}@${FORGE_HOST}/OWNER/REPO.git` |
+| Secret wrapper | `<secret-wrapper> bash -c '... ${FORGE_PAT} ...'` |
 | Default branch | `main` |
 | Workflow | branch → commit → push → PR → CI → merge → cleanup |
 
@@ -50,9 +70,9 @@ When the user asks to "work in the repo today", load this skill first, then orie
    ```bash
    git stash push -m "pre-main-sync" -- <paths>
    <secret-wrapper> bash -c '
-     git -c http.extraHeader="Authorization: token <YOUR_PAT>" fetch origin main 2>&1
+     git -c http.extraHeader="Authorization: Bearer ${FORGE_PAT}" fetch origin main 2>&1
      git switch main 2>&1
-     git -c http.extraHeader="Authorization: token <YOUR_PAT>" pull --ff-only origin main 2>&1
+     git -c http.extraHeader="Authorization: Bearer ${FORGE_PAT}" pull --ff-only origin main 2>&1
    '
    git stash pop
    ```
@@ -69,10 +89,10 @@ When the user asks to "work in the repo today", load this skill first, then orie
 
 ### The stdout-pollution problem
 
-Wrappers such as `infisical run --silent` may still emit a leading log line to stdout (e.g. `INF Injecting N secrets`). Piping that output directly into `jq` or a Python JSON parser can fail. The reliable fix is to **redirect curl output to a file and parse from the file**.
+Secret wrappers (e.g. `infisical run --`, `op run --`, or a manual `export`) may still emit a leading log line to stdout (e.g. `INF Injecting N secrets`). Piping that output directly into `jq` or a Python JSON parser can fail. The reliable fix is to **redirect curl output to a file and parse from the file**.
 
 ```bash
-<secret-wrapper> bash -c 'curl -s -H "AuthorizationHeaderToken: <YOUR_PAT>" "<API_URL>" > /tmp/chucknet_<endpoint>.json'
+<secret-wrapper> bash -c 'curl -s -H "AuthorizationHeaderToken: ${FORGE_PAT}" "<API_URL>" > /tmp/chucknet_<endpoint>.json'
 python3 -c "
 import json
 with open('/tmp/chucknet_<endpoint>.json') as f:
@@ -88,14 +108,14 @@ For paginated lists, save each page separately (`_p1`, `_p2`, ...) and merge wit
 SSH is assumed blocked. Push via HTTPS with the token in the URL:
 
 ```bash
-<secret-wrapper> bash -c 'git -C /path/to/repo push https://<YOUR_PAT>@<host>/OWNER/REPO.git <branch> 2>&1'
+<secret-wrapper> bash -c 'git -C /path/to/repo push https://${FORGE_PAT}@${FORGE_HOST}/OWNER/REPO.git <branch> 2>&1'
 ```
 
 ### Fetch a branch before push/force-with-lease
 
 ```bash
 <secret-wrapper> bash -c '
-  git -c http.extraHeader="Authorization: token <YOUR_PAT>" fetch origin <branch> 2>&1 || true
+  git -c http.extraHeader="Authorization: Bearer ${FORGE_PAT}" fetch origin <branch> 2>&1 || true
 '
 ```
 
@@ -145,7 +165,8 @@ EOF
 <secret-wrapper> bash -c 'curl -s -X POST \\
   -H "Content-Type: application/json" \\
   -d @/tmp/chucknet_pr.json \\
-  "https://<host>/api/v1/repos/OWNER/REPO/pulls?access_token=<YOUR_PAT>" > /tmp/chucknet_pr_response.json'
+  -H "AuthorizationHeaderToken: ${FORGE_PAT}"  \
+  "https://${FORGE_HOST}/api/v1/repos/OWNER/REPO/pulls" > /tmp/chucknet_pr_response.json'
 python3 -c "import json; d=json.load(open('/tmp/chucknet_pr_response.json')); print(d.get('number'), d.get('url'))"
 ```
 
@@ -156,7 +177,8 @@ python3 -c "import json; d=json.load(open('/tmp/chucknet_pr_response.json')); pr
 ```bash
 SHA=$(git rev-parse HEAD)
 <secret-wrapper> bash -c 'curl -s \\
-  "https://<host>/api/v1/repos/OWNER/REPO/commits/<SHA>/statuses?access_token=<YOUR_PAT>" > /tmp/chucknet_statuses.json'
+  -H "AuthorizationHeaderToken: ${FORGE_PAT}"  \
+  "https://${FORGE_HOST}/api/v1/repos/OWNER/REPO/commits/<SHA>/statuses" > /tmp/chucknet_statuses.json'
 python3 -c "
 import json
 for s in json.load(open('/tmp/chucknet_statuses.json')):
@@ -175,7 +197,8 @@ PR_NUMBER=<n>
 <secret-wrapper> bash -c 'curl -s -X POST \\
   -H "Content-Type: application/json" \\
   -d \'{"do":"merge"}\' \\
-  "https://<host>/api/v1/repos/OWNER/REPO/pulls/<PR_NUMBER>/merge?access_token=<YOUR_PAT>" > /tmp/chucknet_merge.json'
+  -H "AuthorizationHeaderToken: ${FORGE_PAT}"  \
+  "https://${FORGE_HOST}/api/v1/repos/OWNER/REPO/pulls/<PR_NUMBER>/merge" > /tmp/chucknet_merge.json'
 python3 -c "import json; print(json.load(open('/tmp/chucknet_merge.json')))"
 ```
 
@@ -191,12 +214,13 @@ If the API returns "Please try again later" / "The target couldn't be found", ch
 2. Reset local `main` and fast-forward:
    ```bash
    git checkout main
-   <secret-wrapper> bash -c 'git -c http.extraHeader="Authorization: token <YOUR_PAT>" pull --ff-only origin main'
+   <secret-wrapper> bash -c 'git -c http.extraHeader="Authorization: Bearer ${FORGE_PAT}" pull --ff-only origin main'
    ```
 3. Delete the remote feature branch. On some Forgejo instances branch auto-delete does not work despite the setting; use the API:
    ```bash
    <secret-wrapper> bash -c 'curl -s -X DELETE \\
-     "https://<host>/api/v1/repos/OWNER/REPO/branches/<BRANCH_NAME>?access_token=<YOUR_PAT>"'
+     -H "AuthorizationHeaderToken: ${FORGE_PAT}"  \
+  "https://${FORGE_HOST}/api/v1/repos/OWNER/REPO/branches/<BRANCH_NAME>"'
    ```
    Note: `DELETE /api/v1/repos/.../branches/<name>` is the working endpoint on this Forgejo instance; `git/refs/heads/` returns 405.
 4. Delete the local branch:
@@ -211,7 +235,7 @@ After `git commit --amend` on a branch that already exists on the forge, `--forc
 ```bash
 <secret-wrapper> bash -c '
   set -e
-  git remote add tmp-pat-push https://<YOUR_PAT>@<host>/OWNER/REPO.git 2>/dev/null || true
+  git remote add tmp-pat-push https://${FORGE_PAT}@${FORGE_HOST}/OWNER/REPO.git 2>/dev/null || true
   git fetch tmp-pat-push <branch>
   git push tmp-pat-push <branch> --force-with-lease
   git remote remove tmp-pat-push
@@ -226,7 +250,8 @@ Labels in the JSON payload must often be **label IDs (integers)**, not names. Qu
 
 ```bash
 <secret-wrapper> bash -c 'curl -s \\
-  "https://<host>/api/v1/repos/OWNER/REPO/labels?access_token=<YOUR_PAT>" > /tmp/chucknet_labels.json'
+  -H "AuthorizationHeaderToken: ${FORGE_PAT}"  \
+  "https://${FORGE_HOST}/api/v1/repos/OWNER/REPO/labels" > /tmp/chucknet_labels.json'
 python3 -c "
 import json
 for l in json.load(open('/tmp/chucknet_labels.json')):
@@ -256,7 +281,7 @@ Rules:
 ## Common Pitfalls
 
 1. **Piping secret-wrapper output directly to a JSON parser.** Redirect curl to a file and parse from the file.
-2. **Using the wrong auth method.** Forgejo instances vary: `AuthorizationHeaderToken`, `Authorization: token`, and `Authorization: Bearer` may all return "token is required". The fallback that worked in this session was `?access_token=<YOUR_PAT>`. GitHub uses `Authorization: token` or `Bearer`.
+2. **Using the wrong auth method.** Forgejo instances vary: `AuthorizationHeaderToken`, `Authorization: token`, and `Authorization: Bearer` may all return "token is required". The fallback that worked in this session was `?access_token=${FORGE_PAT}`. GitHub uses `Authorization: token` or `Bearer`.
 3. **Pushing to `main`.** Always PR-only. Direct push is usually blocked by branch protection.
 4. **Assuming local `main` is current.** Sync from remote before every tracker/plan update.
 5. **Forgetting to fetch the remote tip before `--force-with-lease`.** Leads to stale-info rejection.
@@ -284,5 +309,5 @@ Rules:
 
 ## Reference Files
 
-- `references/forgejo-api-patterns.md` — Reusable recipes for authenticated API calls and JSON parsing against Forgejo, including the `?access_token=<YOUR_PAT>` fallback and the `infisical` log-line gotcha.
+- `references/forgejo-api-patterns.md` — Reusable recipes for authenticated API calls and JSON parsing against Forgejo, including the `?access_token=${FORGE_PAT}` fallback and the `infisical` log-line gotcha.
 - `references/multi-assistant-coordination.md` — Rules for avoiding races when more than one assistant is active in the same repo.

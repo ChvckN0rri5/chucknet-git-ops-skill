@@ -54,11 +54,11 @@ If there are local changes, stash them, sync, then restore:
 ```bash
 git stash push -m "pre-main-sync" -- <paths>
 <secret-wrapper> bash -c '
-  git -c http.extraHeader="Authorization: token <YOUR_PAT>" fetch origin main
+  git -c http.extraHeader="Authorization: Bearer *** fetch origin main
   git switch main
-  git -c http.extraHeader="Authorization: token <YOUR_PAT>" pull --ff-only origin main
+  git -c http.extraHeader="Authorization: Bearer *** pull --ff-only origin main
 '
 git stash pop
 ```
 
-This avoids losing uncommitted work when `main` has moved ahead.
+Replace `${FORGE_HOST}` and `${FORGE_PAT}` with whatever environment variables the user has configured.
