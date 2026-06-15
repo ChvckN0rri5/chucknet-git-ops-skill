@@ -1,6 +1,6 @@
 # ChuckNet Git Operations
 
-A Hermes skill for working with private Forgejo or GitHub repositories using a PR-only workflow, PAT-based HTTPS authentication, and multi-assistant coordination.
+A harness (*claw, herems, claude-code...) skill for working with private repositories using a PR-only workflow, Acces Token/PAT-based HTTPS authentication, and multi-assistant coordination.
 
 This skill is intentionally **assistant-agnostic**. The instructions are plain Markdown, so Claude, OpenAI Codex, or any other AI assistant can follow them by reading the files directly from this repository.
 
