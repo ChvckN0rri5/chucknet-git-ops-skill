@@ -33,9 +33,9 @@ Don't use this skill for public GitHub repos where plain `gh` and `git` already 
 | Repo host | `forge.example.com` or `github.example.com` |
 | Repo path | `OWNER/REPO` (extract from remote URL) |
 | API base | `https://<host>/api/v1/repos/OWNER/REPO` (Forgejo) or `https://api.github.com/repos/OWNER/REPO` (GitHub) |
-| Auth header | Forgejo: try `?access_token=${TOKEN}` first; `AuthorizationHeaderToken: ${TOKEN}` may fail depending on Forgejo version/config. GitHub: `Authorization: token ${TOKEN}` or `Authorization: Bearer *** |
-| Push URL | `https://${TOKEN}@<host>/OWNER/REPO.git` |
-| Secret wrapper | `infisical run --env=prod --silent -- bash -c '... ${TOKEN} ...'` (or your equivalent) |
+| Auth header | Forgejo: try `?access_token=<YOUR_PAT>` first; `AuthorizationHeaderToken: <YOUR_PAT>` may fail depending on Forgejo version/config. GitHub: `Authorization: token <YOUR_PAT>` or `Authorization: Bearer *** |
+| Push URL | `https://<YOUR_PAT>@<host>/OWNER/REPO.git` |
+| Secret wrapper | `infisical run --env=prod --silent -- bash -c '... <YOUR_PAT> ...'` (or your equivalent) |
 | Default branch | `main` |
 | Workflow | branch → commit → push → PR → CI → merge → cleanup |
 
@@ -50,9 +50,9 @@ When the user asks to "work in the repo today", load this skill first, then orie
    ```bash
    git stash push -m "pre-main-sync" -- <paths>
    <secret-wrapper> bash -c '
-     git -c http.extraHeader="Authorization: token ${TOKEN}" fetch origin main 2>&1
+     git -c http.extraHeader="Authorization: token <YOUR_PAT>" fetch origin main 2>&1
      git switch main 2>&1
-     git -c http.extraHeader="Authorization: token ${TOKEN}" pull --ff-only origin main 2>&1
+     git -c http.extraHeader="Authorization: token <YOUR_PAT>" pull --ff-only origin main 2>&1
    '
    git stash pop
    ```
@@ -72,7 +72,7 @@ When the user asks to "work in the repo today", load this skill first, then orie
 Wrappers such as `infisical run --silent` may still emit a leading log line to stdout (e.g. `INF Injecting N secrets`). Piping that output directly into `jq` or a Python JSON parser can fail. The reliable fix is to **redirect curl output to a file and parse from the file**.
 
 ```bash
-<secret-wrapper> bash -c 'curl -s -H "AuthorizationHeaderToken: ${TOKEN}" "<API_URL>" > /tmp/chucknet_<endpoint>.json'
+<secret-wrapper> bash -c 'curl -s -H "AuthorizationHeaderToken: <YOUR_PAT>" "<API_URL>" > /tmp/chucknet_<endpoint>.json'
 python3 -c "
 import json
 with open('/tmp/chucknet_<endpoint>.json') as f:
@@ -88,14 +88,14 @@ For paginated lists, save each page separately (`_p1`, `_p2`, ...) and merge wit
 SSH is assumed blocked. Push via HTTPS with the token in the URL:
 
 ```bash
-<secret-wrapper> bash -c 'git -C /path/to/repo push https://${TOKEN}@<host>/OWNER/REPO.git <branch> 2>&1'
+<secret-wrapper> bash -c 'git -C /path/to/repo push https://<YOUR_PAT>@<host>/OWNER/REPO.git <branch> 2>&1'
 ```
 
 ### Fetch a branch before push/force-with-lease
 
 ```bash
 <secret-wrapper> bash -c '
-  git -c http.extraHeader="Authorization: token ${TOKEN}" fetch origin <branch> 2>&1 || true
+  git -c http.extraHeader="Authorization: token <YOUR_PAT>" fetch origin <branch> 2>&1 || true
 '
 ```
 
@@ -145,7 +145,7 @@ EOF
 <secret-wrapper> bash -c 'curl -s -X POST \\
   -H "Content-Type: application/json" \\
   -d @/tmp/chucknet_pr.json \\
-  "https://<host>/api/v1/repos/OWNER/REPO/pulls?access_token=${TOKEN}" > /tmp/chucknet_pr_response.json'
+  "https://<host>/api/v1/repos/OWNER/REPO/pulls?access_token=<YOUR_PAT>" > /tmp/chucknet_pr_response.json'
 python3 -c "import json; d=json.load(open('/tmp/chucknet_pr_response.json')); print(d.get('number'), d.get('url'))"
 ```
 
@@ -156,7 +156,7 @@ python3 -c "import json; d=json.load(open('/tmp/chucknet_pr_response.json')); pr
 ```bash
 SHA=$(git rev-parse HEAD)
 <secret-wrapper> bash -c 'curl -s \\
-  "https://<host>/api/v1/repos/OWNER/REPO/commits/<SHA>/statuses?access_token=${TOKEN}" > /tmp/chucknet_statuses.json'
+  "https://<host>/api/v1/repos/OWNER/REPO/commits/<SHA>/statuses?access_token=<YOUR_PAT>" > /tmp/chucknet_statuses.json'
 python3 -c "
 import json
 for s in json.load(open('/tmp/chucknet_statuses.json')):
@@ -175,7 +175,7 @@ PR_NUMBER=<n>
 <secret-wrapper> bash -c 'curl -s -X POST \\
   -H "Content-Type: application/json" \\
   -d \'{"do":"merge"}\' \\
-  "https://<host>/api/v1/repos/OWNER/REPO/pulls/<PR_NUMBER>/merge?access_token=${TOKEN}" > /tmp/chucknet_merge.json'
+  "https://<host>/api/v1/repos/OWNER/REPO/pulls/<PR_NUMBER>/merge?access_token=<YOUR_PAT>" > /tmp/chucknet_merge.json'
 python3 -c "import json; print(json.load(open('/tmp/chucknet_merge.json')))"
 ```
 
@@ -191,12 +191,12 @@ If the API returns "Please try again later" / "The target couldn't be found", ch
 2. Reset local `main` and fast-forward:
    ```bash
    git checkout main
-   <secret-wrapper> bash -c 'git -c http.extraHeader="Authorization: token ${TOKEN}" pull --ff-only origin main'
+   <secret-wrapper> bash -c 'git -c http.extraHeader="Authorization: token <YOUR_PAT>" pull --ff-only origin main'
    ```
 3. Delete the remote feature branch. On some Forgejo instances branch auto-delete does not work despite the setting; use the API:
    ```bash
    <secret-wrapper> bash -c 'curl -s -X DELETE \\
-     "https://<host>/api/v1/repos/OWNER/REPO/branches/<BRANCH_NAME>?access_token=${TOKEN}"'
+     "https://<host>/api/v1/repos/OWNER/REPO/branches/<BRANCH_NAME>?access_token=<YOUR_PAT>"'
    ```
    Note: `DELETE /api/v1/repos/.../branches/<name>` is the working endpoint on this Forgejo instance; `git/refs/heads/` returns 405.
 4. Delete the local branch:
@@ -211,7 +211,7 @@ After `git commit --amend` on a branch that already exists on the forge, `--forc
 ```bash
 <secret-wrapper> bash -c '
   set -e
-  git remote add tmp-pat-push https://${TOKEN}@<host>/OWNER/REPO.git 2>/dev/null || true
+  git remote add tmp-pat-push https://<YOUR_PAT>@<host>/OWNER/REPO.git 2>/dev/null || true
   git fetch tmp-pat-push <branch>
   git push tmp-pat-push <branch> --force-with-lease
   git remote remove tmp-pat-push
@@ -226,7 +226,7 @@ Labels in the JSON payload must often be **label IDs (integers)**, not names. Qu
 
 ```bash
 <secret-wrapper> bash -c 'curl -s \\
-  "https://<host>/api/v1/repos/OWNER/REPO/labels?access_token=${TOKEN}" > /tmp/chucknet_labels.json'
+  "https://<host>/api/v1/repos/OWNER/REPO/labels?access_token=<YOUR_PAT>" > /tmp/chucknet_labels.json'
 python3 -c "
 import json
 for l in json.load(open('/tmp/chucknet_labels.json')):
@@ -256,7 +256,7 @@ Rules:
 ## Common Pitfalls
 
 1. **Piping secret-wrapper output directly to a JSON parser.** Redirect curl to a file and parse from the file.
-2. **Using the wrong auth method.** Forgejo instances vary: `AuthorizationHeaderToken`, `Authorization: token`, and `Authorization: Bearer` may all return "token is required". The fallback that worked in this session was `?access_token=${TOKEN}`. GitHub uses `Authorization: token` or `Bearer`.
+2. **Using the wrong auth method.** Forgejo instances vary: `AuthorizationHeaderToken`, `Authorization: token`, and `Authorization: Bearer` may all return "token is required". The fallback that worked in this session was `?access_token=<YOUR_PAT>`. GitHub uses `Authorization: token` or `Bearer`.
 3. **Pushing to `main`.** Always PR-only. Direct push is usually blocked by branch protection.
 4. **Assuming local `main` is current.** Sync from remote before every tracker/plan update.
 5. **Forgetting to fetch the remote tip before `--force-with-lease`.** Leads to stale-info rejection.
@@ -284,5 +284,5 @@ Rules:
 
 ## Reference Files
 
-- `references/forgejo-api-patterns.md` — Reusable recipes for authenticated API calls and JSON parsing against Forgejo, including the `?access_token=${TOKEN}` fallback and the `infisical` log-line gotcha.
+- `references/forgejo-api-patterns.md` — Reusable recipes for authenticated API calls and JSON parsing against Forgejo, including the `?access_token=<YOUR_PAT>` fallback and the `infisical` log-line gotcha.
 - `references/multi-assistant-coordination.md` — Rules for avoiding races when more than one assistant is active in the same repo.

@@ -12,7 +12,7 @@ Secret-wrapped Forgejo instances have a few quirks that break naive GitHub-style
 
 ## Header auth on this Forgejo instance
 
-This Forgejo instance accepts `AuthorizationHeaderToken: ${TOKEN}`. It rejects the GitHub-style `Authorization: token ${TOKEN}` header. If that changes after a server upgrade, switch back to the standard header.
+This Forgejo instance accepts `AuthorizationHeaderToken: <YOUR_PAT>`. It rejects the GitHub-style `Authorization: token <YOUR_PAT>` header. If that changes after a server upgrade, switch back to the standard header.
 
 ## Redirect curl output to a file
 
@@ -20,7 +20,7 @@ The secret wrapper may print a log line to stdout before curl runs. Always redir
 
 ```bash
 infisical run --env=prod --silent -- bash -c '
-  curl -s -H "AuthorizationHeaderToken: ${TOKEN}" \
+  curl -s -H "AuthorizationHeaderToken: <YOUR_PAT>" \
     "https://forge.example.com/api/v1/repos/OWNER/REPO/issues" \
     > /tmp/chucknet_issues.json
 '
@@ -39,7 +39,7 @@ print(json.dumps(data, indent=2))
 ```bash
 for p in 1 2 3 4 5; do
   infisical run --env=prod --silent -- bash -c "
-    curl -s -H \"AuthorizationHeaderToken: \${TOKEN}\" \
+    curl -s -H \"AuthorizationHeaderToken: \<YOUR_PAT>\" \
       \"https://forge.example.com/api/v1/repos/OWNER/REPO/issues?state=open&page=${p}\" \
       > /tmp/chucknet_issues_p${p}.json
   "
@@ -66,7 +66,7 @@ Forgejo uses `"do":"merge"`. Some instances are case-sensitive and reject `"Do":
 ```bash
 infisical run --env=prod --silent -- bash -c '
   curl -s -X POST \
-    -H "AuthorizationHeaderToken: ${TOKEN}" \
+    -H "AuthorizationHeaderToken: <YOUR_PAT>" \
     -H "Content-Type: application/json" \
     -d '"'"'{"do":"merge"}'"'"' \
     "https://forge.example.com/api/v1/repos/OWNER/REPO/pulls/1/merge" \
@@ -82,7 +82,7 @@ python3 -c "import json; print(json.load(open('/tmp/chucknet_merge.json')))"
 ```bash
 infisical run --env=prod --silent -- bash -c '
   curl -s -X DELETE \
-    -H "AuthorizationHeaderToken: ${TOKEN}" \
+    -H "AuthorizationHeaderToken: <YOUR_PAT>" \
     -w "%{http_code}\n" \
     "https://forge.example.com/api/v1/repos/OWNER/REPO/branches/feat/description"
 '
@@ -94,7 +94,7 @@ When creating issues or PRs, the `labels` field must be a list of label IDs, not
 
 ```bash
 infisical run --env=prod --silent -- bash -c '
-  curl -s -H "AuthorizationHeaderToken: ${TOKEN}" \
+  curl -s -H "AuthorizationHeaderToken: <YOUR_PAT>" \
     "https://forge.example.com/api/v1/repos/OWNER/REPO/labels" \
     > /tmp/chucknet_labels.json
 '
@@ -109,4 +109,4 @@ Then pass e.g. `[1, 2]` in the issue JSON.
 
 ## If the header variant stops working
 
-If the Forgejo instance is upgraded and `AuthorizationHeaderToken` is removed, the fallback is the query parameter `?access_token=${TOKEN}`. Because this pattern trips some security scanners, it is not shown in the primary examples above; add it only when you have confirmed the header is no longer accepted.
+If the Forgejo instance is upgraded and `AuthorizationHeaderToken` is removed, the fallback is the query parameter `?access_token=<YOUR_PAT>`. Because this pattern trips some security scanners, it is not shown in the primary examples above; add it only when you have confirmed the header is no longer accepted.
