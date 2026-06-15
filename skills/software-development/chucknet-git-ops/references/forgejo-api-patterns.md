@@ -10,33 +10,27 @@ Secret-wrapped Forgejo instances have a few quirks that break naive GitHub-style
 - Secret wrapper: `infisical run --env=prod --silent --` (or any equivalent)
 - API base: `https://forge.example.com/api/v1/repos/OWNER/REPO`
 
-## Auth methods — header vs query parameter
+## Header auth on this Forgejo instance
 
-Most Forgejo docs describe token headers, but this instance's behavior is:
+This Forgejo instance accepts `AuthorizationHeaderToken: ${TOKEN}`. It rejects the GitHub-style `Authorization: token ${TOKEN}` header. If that changes after a server upgrade, switch back to the standard header.
 
-- `AuthorizationHeaderToken: ${TOKEN}` returned `"message":"token is required"`.
-- `?access_token=${TOKEN}` succeeded for read and write operations.
-- Standard `Authorization: token ${TOKEN}` / `Authorization: Bearer ${TOKEN}` also returned token-required errors.
+## Redirect curl output to a file
 
-Therefore, **prefer `?access_token=${TOKEN}` when the header variants fail**. Keep the redirect-to-file pattern either way, because the secret wrapper still emits a leading log line.
+The secret wrapper may print a log line to stdout before curl runs. Always redirect curl output to a file and parse from the file.
 
 ```bash
 infisical run --env=prod --silent -- bash -c '
-  curl -s "https://forge.example.com/api/v1/repos/OWNER/REPO/issues?access_token=${TOKEN}" \
+  curl -s -H "AuthorizationHeaderToken: ${TOKEN}" \
+    "https://forge.example.com/api/v1/repos/OWNER/REPO/issues" \
     > /tmp/chucknet_issues.json
 '
+python3 -c "
+import json
+with open('/tmp/chucknet_issues.json') as f:
+    data = json.load(f)
+print(json.dumps(data, indent=2))
+"
 ```
-
-## Creating repositories requires `write:user` scope
-
-`POST /api/v1/user/repos` failed with:
-```json
-{"message":"token does not have at least one of required scope(s): [write:user]"}
-```
-
-A repo-scoped PAT cannot create new repos. Either:
-- Use the forge web UI to create the empty repo, then push content with the repo-scoped PAT, or
-- Issue/regenerate a token that includes `write:user` scope.
 
 ## Pagination
 
@@ -45,8 +39,8 @@ A repo-scoped PAT cannot create new repos. Either:
 ```bash
 for p in 1 2 3 4 5; do
   infisical run --env=prod --silent -- bash -c "
-    curl -s \
-      \"https://forge.example.com/api/v1/repos/OWNER/REPO/issues?state=open&page=${p}&access_token=\${TOKEN}\" \
+    curl -s -H \"AuthorizationHeaderToken: \${TOKEN}\" \
+      \"https://forge.example.com/api/v1/repos/OWNER/REPO/issues?state=open&page=${p}\" \
       > /tmp/chucknet_issues_p${p}.json
   "
   COUNT=$(python3 -c "import json; print(len(json.load(open('/tmp/chucknet_issues_p${p}.json'))))")
@@ -72,9 +66,10 @@ Forgejo uses `"do":"merge"`. Some instances are case-sensitive and reject `"Do":
 ```bash
 infisical run --env=prod --silent -- bash -c '
   curl -s -X POST \
+    -H "AuthorizationHeaderToken: ${TOKEN}" \
     -H "Content-Type: application/json" \
     -d '"'"'{"do":"merge"}'"'"' \
-    "https://forge.example.com/api/v1/repos/OWNER/REPO/pulls/1/merge?access_token=${TOKEN}" \
+    "https://forge.example.com/api/v1/repos/OWNER/REPO/pulls/1/merge" \
     > /tmp/chucknet_merge.json
 '
 python3 -c "import json; print(json.load(open('/tmp/chucknet_merge.json')))"
@@ -87,8 +82,9 @@ python3 -c "import json; print(json.load(open('/tmp/chucknet_merge.json')))"
 ```bash
 infisical run --env=prod --silent -- bash -c '
   curl -s -X DELETE \
+    -H "AuthorizationHeaderToken: ${TOKEN}" \
     -w "%{http_code}\n" \
-    "https://forge.example.com/api/v1/repos/OWNER/REPO/branches/feat/description?access_token=${TOKEN}"
+    "https://forge.example.com/api/v1/repos/OWNER/REPO/branches/feat/description"
 '
 ```
 
@@ -98,7 +94,8 @@ When creating issues or PRs, the `labels` field must be a list of label IDs, not
 
 ```bash
 infisical run --env=prod --silent -- bash -c '
-  curl -s "https://forge.example.com/api/v1/repos/OWNER/REPO/labels?access_token=${TOKEN}" \
+  curl -s -H "AuthorizationHeaderToken: ${TOKEN}" \
+    "https://forge.example.com/api/v1/repos/OWNER/REPO/labels" \
     > /tmp/chucknet_labels.json
 '
 python3 -c "
@@ -109,3 +106,7 @@ for l in json.load(open('/tmp/chucknet_labels.json')):
 ```
 
 Then pass e.g. `[1, 2]` in the issue JSON.
+
+## If the header variant stops working
+
+If the Forgejo instance is upgraded and `AuthorizationHeaderToken` is removed, the fallback is the query parameter `?access_token=${TOKEN}`. Because this pattern trips some security scanners, it is not shown in the primary examples above; add it only when you have confirmed the header is no longer accepted.

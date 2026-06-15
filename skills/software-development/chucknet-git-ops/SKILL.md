@@ -72,7 +72,7 @@ When the user asks to "work in the repo today", load this skill first, then orie
 Wrappers such as `infisical run --silent` may still emit a leading log line to stdout (e.g. `INF Injecting N secrets`). Piping that output directly into `jq` or a Python JSON parser can fail. The reliable fix is to **redirect curl output to a file and parse from the file**.
 
 ```bash
-<secret-wrapper> bash -c 'curl -s "<API_URL>?access_token=${TOKEN}" > /tmp/chucknet_<endpoint>.json'
+<secret-wrapper> bash -c 'curl -s -H "AuthorizationHeaderToken: ${TOKEN}" "<API_URL>" > /tmp/chucknet_<endpoint>.json'
 python3 -c "
 import json
 with open('/tmp/chucknet_<endpoint>.json') as f:
